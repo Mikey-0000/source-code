@@ -29,7 +29,7 @@ export class BootSequence {
 }
 
 // ───────────── Title ─────────────
-export interface TitleHooks { onNew(): void; onContinue(): void; onCredits(): void; onSettings(): void }
+export interface TitleHooks { onNew(): void; onContinue(): void; onCredits(): void; onSettings(): void; onGuide(): void }
 export class TitleMenu {
   root: HTMLElement; private cv: HTMLCanvasElement; private raf = 0; private mouse: [number, number] = [430, 170]; private t = 0; menu: HTMLElement;
   constructor(parent: HTMLElement, private hooks: TitleHooks) {
@@ -43,7 +43,7 @@ export class TitleMenu {
   }
   private notice(ui: HTMLElement) { if (matchMedia('(pointer: coarse)').matches || innerWidth < 760) el('div', 'mobile-note', ui, 'Desktop recommended: SOURCE CODE needs a physical keyboard for movement and the code editor. Touch controls are not implemented in this build.'); }
   build() {
-    this.menu.innerHTML = ''; const items: [string, () => void, boolean][] = [['NEW GAME', this.hooks.onNew, true], ['CONTINUE', this.hooks.onContinue, hasSave()], ['SETTINGS', this.hooks.onSettings, true], ['CREDITS', this.hooks.onCredits, true]];
+    this.menu.innerHTML = ''; const items: [string, () => void, boolean][] = [['NEW GAME', this.hooks.onNew, true], ['CONTINUE', this.hooks.onContinue, hasSave()], ['HOW TO PLAY', this.hooks.onGuide, true], ['SETTINGS', this.hooks.onSettings, true], ['CREDITS', this.hooks.onCredits, true]];
     const exit = this.exitUrl(); if (exit) items.push(['EXIT TO PORTFOLIO', () => { location.href = exit; }, true]);
     items.forEach(([t, fn, on], i) => { const b = el('button', 'menu-btn', this.menu, t); b.disabled = !on; b.dataset.i = String(i); b.addEventListener('click', () => { audio.init(); audio.sfx('click'); fn(); }); b.addEventListener('mouseenter', () => { if (!b.disabled) { b.focus(); audio.sfx('beep'); } }); });
     (this.menu.querySelector('button:not(:disabled)') as HTMLButtonElement)?.focus();
@@ -61,9 +61,9 @@ export class SettingsPanel {
     this.root = el('div', 'card settings', parent); this.root.setAttribute('role', 'dialog'); this.root.setAttribute('aria-label', 'Settings'); el('div', 'card-k', this.root, 'SYSTEM'); el('h2', '', this.root, 'SETTINGS');
     const grid = el('div', 'set-grid', this.root);
     const slider = (label: string, key: 'music' | 'sfx' | 'dialogueSpeed' | 'textScale', min: number, max: number, step: number) => { const row = el('label', 'set-row', grid); el('span', '', row, label); const i = el('input', '', row); i.type = 'range'; i.min = String(min); i.max = String(max); i.step = String(step); i.value = String(settings[key]); const v = el('output', '', row, String(settings[key])); i.addEventListener('input', () => { (settings[key] as number) = Number(i.value); v.textContent = Number(i.value).toFixed(2); saveSettings(); if (key === 'sfx') audio.sfx('beep'); }); };
-    const toggle = (label: string, key: 'reducedMotion' | 'crt' | 'flashes' | 'highContrast' | 'subtitles' | 'hints', desc: string) => { const row = el('label', 'set-row', grid); el('span', '', row, label); const c = el('input', '', row); c.type = 'checkbox'; c.checked = settings[key] as boolean; c.addEventListener('change', () => { (settings[key] as boolean) = c.checked; saveSettings(); }); el('small', 'muted', row, desc); };
+    const toggle = (label: string, key: 'reducedMotion' | 'crt' | 'flashes' | 'highContrast' | 'subtitles' | 'hints' | 'infiniteJump', desc: string) => { const row = el('label', 'set-row', grid); el('span', '', row, label); const c = el('input', '', row); c.type = 'checkbox'; c.checked = settings[key] as boolean; c.addEventListener('change', () => { (settings[key] as boolean) = c.checked; saveSettings(); }); el('small', 'muted', row, desc); };
     slider('Music volume', 'music', 0, 1, 0.05); slider('Effects volume', 'sfx', 0, 1, 0.05); slider('Dialogue speed', 'dialogueSpeed', 0.4, 3, 0.1); slider('Text size', 'textScale', 0.85, 1.5, 0.05);
-    toggle('Reduced motion', 'reducedMotion', 'Disables screen shake, glitch slices and afterimages.'); toggle('CRT effect', 'crt', 'Scanlines, curvature and chromatic aberration.'); toggle('Flashes', 'flashes', 'Off removes bright flash frames.'); toggle('High contrast', 'highContrast', 'Brighter UI borders and text.'); toggle('Subtitles', 'subtitles', 'Show ADMIN/ECHO speech as dialogue (otherwise logged to console).'); toggle('Hints', 'hints', 'Allow the HINT button.');
+    toggle('Reduced motion', 'reducedMotion', 'Disables screen shake, glitch slices and afterimages.'); toggle('CRT effect', 'crt', 'Scanlines, curvature and chromatic aberration.'); toggle('Flashes', 'flashes', 'Off removes bright flash frames.'); toggle('High contrast', 'highContrast', 'Brighter UI borders and text.'); toggle('Subtitles', 'subtitles', 'Show ADMIN/ECHO speech as dialogue (otherwise logged to console).'); toggle('Hints', 'hints', 'Allow the HINT button.'); toggle('Infinite jump (assist)', 'infiniteJump', 'Jump again in mid-air, as often as you like. Press J in-game to toggle. Makes jump puzzles much easier.');
     const ex = el('label', 'set-row', grid); el('span', '', ex, 'Exit-to-Portfolio URL'); const u = el('input', 'txt', ex); u.type = 'url'; u.placeholder = 'https://your-portfolio.example'; u.value = settings.exitUrl; u.addEventListener('change', () => { settings.exitUrl = u.value.trim(); saveSettings(); });
     el('div', 'card-k', this.root, 'CONTROLS — click a binding, then press a key');
     const kg = el('div', 'key-grid', this.root); const render = () => { kg.innerHTML = ''; for (const a of Object.keys(DEFAULT_KEYS)) { const row = el('div', 'key-row', kg); el('span', '', row, KEY_LABELS[a]); for (let k = 0; k < 2; k++) { const b = el('button', 'btn small', row, settings.keys[a][k] ? keyName(settings.keys[a][k]) : '—'); b.addEventListener('click', () => { b.textContent = 'press a key…'; input.captureNextKey(code => { if (code === 'Escape') { render(); return; } settings.keys[a][k] = code; saveSettings(); render(); }); }); } } const rs = el('button', 'btn small', kg, 'RESET CONTROLS'); rs.addEventListener('click', () => { settings.keys = JSON.parse(JSON.stringify(DEFAULT_KEYS)); saveSettings(); render(); }); };
@@ -75,4 +75,20 @@ export function showCredits(parent: HTMLElement, onClose: () => void) {
   const c = el('div', 'card credits', parent); el('div', 'card-k', c, 'CREDITS'); el('h2', '', c, 'SOURCE CODE');
   const lines = ['Design, code, pixel art, music and sound: generated procedurally for this project (see ASSET_MANIFEST.md).', 'Engine: custom TypeScript canvas engine. Rule language: custom parser, validator and sandboxed interpreter.', 'Inspiration only (no assets used): OneShot, Pony Island, The Magic Circle, Baba Is You, Hacknet, Katana ZERO, Inscryption, Persona 5.', 'Typography: IBM Plex Mono / Space Mono / Consolas when installed, else the system monospace.', 'All characters, names and files are fictional. EDEN OS is a harmless in-game sandbox and never touches your system.'];
   for (const l of lines) el('p', '', c, l); const b = el('button', 'btn primary', c, 'BACK'); b.addEventListener('click', () => { c.remove(); onClose(); }); b.focus();
+}
+
+// ───────────── How to play ─────────────
+export const GUIDE_SECTIONS: [string, string[]][] = [
+  ['THE GOAL', ['You are NULL, trapped in PROJECT EDEN. Reach the glowing exit gate in each sector.', 'Some jumps are impossible with the default rules. You are allowed to change the rules.']],
+  ['CONTROLS', ['Move: A / D or ← →\nJump: Space, W or ↑\nInteract / read: E', 'Open the source editor: Tab\nApply your code: Ctrl + Enter\nLeave the editor: Esc or Tab\nPause: Esc / P     Respawn: R     Debug overlay: F3 / B\nInfinite jump on/off: J', 'While the editor is focused every key types into it — press Esc or Tab before you try to move.']],
+  ['USING THE EDITOR', ['1. Walk up to a terminal (E) or press Tab once the editor is unlocked.', '2. Change a value, e.g.  player.jumpHeight = 120;   (every line ends with a semicolon).', '3. Watch the PREVIEW line: it shows jump height, air time and range, and a dotted arc appears in the world.', '4. Press Ctrl + Enter. Status must read APPLIED. A red SYNTAX ERROR means nothing was changed — read the console.', 'Stuck? HINT gives a nudge, UNDO / REDO step through edits, RESTORE DEFAULTS resets the file safely.']],
+  ['SECTOR 01 — INITIALISE', ['The 4-tile wall (128 px): jumpHeight 150.', 'The spike tunnel: the ceiling is ~100 px up, so use jumpHeight 70–95 (try 85).', 'The wide gap (128 px): player.speed = 4;  player.jumpHeight = 100;', 'Change the numbers at each obstacle and apply again — checkpoints keep your progress.']],
+  ['CORRUPTION', ['Every rule you change raises corruption. Sensitive things (doors, lasers, enemies, platforms) cost more.', 'STABLE under 33%, UNSTABLE from 33% (cameras, hidden memories), CRITICAL from 66% (a HUNTER appears).', 'ADMIN\'s protected lines (hatched, marked PROTECTED) can\'t be edited — change the conditions they depend on instead.']],
+  ['ASSIST', ['Infinite jump: Settings → "Infinite jump (assist)", or press J while playing. Jump again as often as you like in mid-air.', 'Also in Settings: reduced motion, no flashes, high contrast, text size, key rebinding. Progress saves automatically.']],
+];
+export function showGuide(parent: HTMLElement, onClose: () => void) {
+  const c = el('div', 'card guide', parent); c.setAttribute('role', 'dialog'); c.setAttribute('aria-label', 'How to play'); el('div', 'card-k', c, 'MANUAL'); el('h2', '', c, 'HOW TO PLAY');
+  const body = el('div', 'guide-body', c);
+  for (const [h, lines] of GUIDE_SECTIONS) { const s = el('section', 'guide-sec', body); el('h3', '', s, h); for (const l of lines) el('p', '', s, l); }
+  const b = el('button', 'btn primary', c, 'BACK'); b.addEventListener('click', () => { c.remove(); onClose(); }); b.focus();
 }

@@ -5,12 +5,12 @@ Run on 2026-11-26 in a headless Linux container (Node, system Google Chrome via 
 | Suite | Command | Result |
 |---|---|---|
 | Type check | `npm run typecheck` | clean |
-| Unit + puzzle tests | `npm test` | **35 / 35 pass** |
-| Browser end-to-end | `npm run build && npm run test:e2e` | **20 / 20 checks pass**, 0 console errors (`docs/E2E_RESULTS.json`) |
+| Unit + puzzle tests | `npm test` | **36 / 36 pass** |
+| Browser end-to-end | `npm run build && npm run test:e2e` | **23 / 23 checks pass**, 0 console errors (`docs/E2E_RESULTS.json`) |
 
 ## Unit tests (`src/tests`)
 - **interpreter.test.ts (17):** arithmetic, booleans, conditions, loops, arrays, functions, step/iteration limits, forbidden identifiers, atomic commit on failure, protected-line enforcement, `adminOnly`.
-- **puzzles.test.ts (18):** physics formulas; level sanity; a headless greedy bot proves every puzzle in boot_01, boot_02, exc_01–03 and the boss route is **solvable with the intended rules and unsolvable with the defaults**.
+- **puzzles.test.ts (19, incl. infinite-jump assist):** physics formulas; level sanity; a headless greedy bot proves every puzzle in boot_01, boot_02, exc_01–03 and the boss route is **solvable with the intended rules and unsolvable with the defaults**.
 
 ## End-to-end checks (`tests-e2e/run.mjs`)
 Boot gate and title; canvas actually renders; player moves and jumps; typing in the editor updates the live preview; Ctrl+Enter applies rules to the running world; a syntax error is reported and leaves the world unchanged; out-of-range values are rejected; corruption responds to changes; reaching the exit shows SECTOR COMPLETE and CONTINUE loads the next level; all six levels render with the editor open; EDEN OS opens; no console or page errors.

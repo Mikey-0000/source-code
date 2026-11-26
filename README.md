@@ -15,10 +15,12 @@ Run locally (Node 20+):
 npm install
 npm run dev        # http://localhost:5173 style dev server with watch
 npm run build      # outputs dist/
-npm test           # 35 unit + puzzle-solvability tests
+npm test           # 36 unit + puzzle-solvability tests
 npm run test:e2e   # Playwright browser test (needs Chrome; CHROME_PATH to override)
 ```
 Append `?skipboot=1` to skip the boot sequence.
+
+> **New here?** Read the [Player guide](docs/PLAYER_GUIDE.md) (also available in-game: *HOW TO PLAY* on the title and pause menus). Press **J** in-game for the infinite-jump assist.
 
 ## Controls
 | Action | Keys |
@@ -28,6 +30,7 @@ Append `?skipboot=1` to skip the boot sequence.
 | Open / close source editor | Tab |
 | Compile & apply rules | Ctrl+Enter |
 | Pause | Esc |
+| Infinite jump (assist) on/off | J |
 All keys are rebindable in Settings. Click an object in the debug view to inspect it.
 
 ## The rule language

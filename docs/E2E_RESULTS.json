@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-26T22:22:21.309Z",
+  "date": "2026-11-26T22:47:13.602Z",
   "results": [
     {
       "name": "boot gate shown",
@@ -14,17 +14,32 @@
     {
       "name": "canvas renders pixels",
       "ok": true,
-      "detail": "147434"
+      "detail": "147703"
+    },
+    {
+      "name": "in-game HOW TO PLAY guide opens",
+      "ok": true,
+      "detail": ""
     },
     {
       "name": "player moves right",
       "ok": true,
-      "detail": "73→222"
+      "detail": "73→221"
     },
     {
       "name": "jump gives upward velocity",
       "ok": true,
-      "detail": "-1.6852813742385704"
+      "detail": "-2.4852813742385704"
+    },
+    {
+      "name": "J enables infinite jump",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mid-air re-jumps climb far above a single jump (45 px)",
+      "ok": true,
+      "detail": "climbed 163 px"
     },
     {
       "name": "live preview updates while typing",
@@ -64,32 +79,32 @@
     {
       "name": "level boot_01 renders",
       "ok": true,
-      "detail": "px=151243"
+      "detail": "px=151192"
     },
     {
       "name": "level boot_02 renders",
       "ok": true,
-      "detail": "px=149337"
+      "detail": "px=149288"
     },
     {
       "name": "level exc_01 renders",
       "ok": true,
-      "detail": "px=72097"
+      "detail": "px=72096"
     },
     {
       "name": "level exc_02 renders",
       "ok": true,
-      "detail": "px=93960"
+      "detail": "px=94130"
     },
     {
       "name": "level exc_03 renders",
       "ok": true,
-      "detail": "px=61094"
+      "detail": "px=61018"
     },
     {
       "name": "level boss_watcher renders",
       "ok": true,
-      "detail": "px=33475"
+      "detail": "px=33489"
     },
     {
       "name": "EDEN OS desktop opens",

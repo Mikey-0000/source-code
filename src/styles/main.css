@@ -139,3 +139,5 @@ body.reduced-motion .glitch-text::before, body.reduced-motion .glitch-text::afte
 @media (max-width: 900px) { .game.debug-open .main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } .set-row { grid-template-columns: 1fr; } }
 .game > .titlebar { grid-row: 1; } .game > .main { grid-row: 2; } .game > .console { grid-row: 3; }
 .os-body, .os-body * { overflow-wrap: anywhere; } .os-win.popup .os-body { white-space: normal; } .os-win { max-width: calc(100vw - 20px); }
+.guide { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; width: min(760px, 94vw); } .guide-body { overflow-y: auto; max-height: 62vh; display: flex; flex-direction: column; gap: 12px; padding-right: 8px; }
+.guide-sec h3 { margin: 0 0 4px; color: var(--green); letter-spacing: .2em; font-size: .78rem; } .guide-sec p { white-space: pre-wrap; margin: 3px 0; font-size: .82rem; line-height: 1.5; color: #d2d2d8; }

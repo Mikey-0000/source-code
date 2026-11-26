@@ -1,6 +1,6 @@
 import { el, sleep, clamp } from '../../core/Util';
 import { input } from '../../core/Input';
-import { settings } from '../../core/Settings';
+import { settings, saveSettings } from '../../core/Settings';
 import { audio } from '../../audio/AudioEngine';
 import { PostFX } from '../../effects/PostFX';
 import { VIEW_H, VIEW_W, TILE } from '../../art/Palette';
@@ -12,7 +12,7 @@ import type { LevelDef } from '../levels/LevelTypes';
 import { compileRules, type CompileResult } from '../../editor/RuleInterpreter';
 import { defaultState, type RuleState } from '../../editor/RuleSchema';
 import { Hud, DialogueBox, ConsolePanel, EditorPanel } from '../../ui/Panels';
-import { SettingsPanel } from '../../ui/Menus';
+import { SettingsPanel, showGuide } from '../../ui/Menus';
 import { story } from '../../narrative/StoryFlags';
 import { contribution, stageOf, STAGE_NAMES, STAGE_TEXT } from '../systems/Corruption';
 import { heightAt, airTime, jumpVelocity } from '../physics/Physics';
@@ -105,6 +105,7 @@ export class GameScene {
   private handleKeys() {
     if (input.pressed('pause') && this.overlay.hidden) { this.openPause(); return; }
     if (input.pressed('edit') && !this.editorFocused) { if (!this.level.editorAvailable && !story.data.editorRevealed) { this.hud.toast('No editor here. Yet.'); } else if (this.panelOpen) this.closePanel(); else this.openPanel(true); }
+    if (input.pressed('assist') && !this.editorFocused) { settings.infiniteJump = !settings.infiniteJump; saveSettings(); this.hud.toast(settings.infiniteJump ? 'INFINITE JUMP: ON  [J]' : 'INFINITE JUMP: OFF  [J]'); audio.sfx('click'); }
     if (input.pressed('debug')) this.toggleDebug();
     if (input.pressed('restart') && !this.editorFocused && this.world.dead === 0) { this.world.integrity = 0; this.world.die(); }
     if (input.pressed('interact') && !this.editorFocused) { const t = this.world.nearestTerminal(); if (t) void this.useTerminal(t); }
@@ -112,7 +113,7 @@ export class GameScene {
   private step(first: boolean) {
     let inp: InputState;
     if (this.scripted && this.scripted.frames > 0) { inp = this.scripted.inp; this.scripted.frames--; } else inp = { left: input.held('left'), right: input.held('right'), jumpHeld: input.held('jump'), jumpPressed: first && input.pressed('jump') };
-    this.world.update(inp);
+    this.world.infiniteJump = settings.infiniteJump; this.world.update(inp);
     for (const e of this.world.events) this.onEvent(e);
   }
   private onEvent(e: World['events'][number]) {
@@ -246,6 +247,7 @@ export class GameScene {
     const first = mk('RESUME', () => this.closePause(), true);
     mk('RESPAWN AT CHECKPOINT', () => { this.closePause(); this.world.integrity = 0; this.world.die(); });
     mk('RESTART SECTOR', () => { this.closePause(); delete story.data.checkpoint[this.level.id]; void this.loadLevel(this.levelIndex, false); });
+    mk('HOW TO PLAY', () => { this.overlay.innerHTML = ''; showGuide(this.overlay, () => this.openPause()); });
     mk('SETTINGS', () => { this.overlay.innerHTML = ''; new SettingsPanel(this.overlay, () => this.openPause()); });
     mk('QUIT TO TITLE', () => { this.closePause(); story.save(); this.hide(); this.hooks.onQuit(); });
     first.focus();

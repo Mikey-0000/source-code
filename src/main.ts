@@ -1,7 +1,7 @@
 import './styles/main.css';
 import { applyBodyClasses, settings } from './core/Settings';
 import { el } from './core/Util';
-import { BootSequence, TitleMenu, SettingsPanel, showCredits } from './ui/Menus';
+import { BootSequence, TitleMenu, SettingsPanel, showCredits, showGuide } from './ui/Menus';
 import { GameScene } from './game/scenes/GameScene';
 import { VirtualDesktop } from './os/VirtualDesktop';
 import { audio } from './audio/AudioEngine';
@@ -18,7 +18,7 @@ let title: TitleMenu | null = null; let game: GameScene | null = null;
 function showTitle() {
   audio.startDrone('title');
   if (title) { title.hide(false); return; }
-  title = new TitleMenu(app, { onNew: () => void startGame(true), onContinue: () => void startGame(false), onSettings: () => { title!.hide(true); new SettingsPanel(app, () => title!.hide(false)); }, onCredits: () => { title!.hide(true); showCredits(app, () => title!.hide(false)); } });
+  title = new TitleMenu(app, { onNew: () => void startGame(true), onContinue: () => void startGame(false), onSettings: () => { title!.hide(true); new SettingsPanel(app, () => title!.hide(false)); }, onGuide: () => { title!.hide(true); showGuide(app, () => title!.hide(false)); }, onCredits: () => { title!.hide(true); showCredits(app, () => title!.hide(false)); } });
 }
 async function startGame(fresh: boolean) {
   title?.hide(true); if (fresh) { wipeSave(); story.reset(); } else story.reload();

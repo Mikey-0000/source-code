@@ -21,9 +21,16 @@ await page.goto(base + '?skipboot=1'); await page.waitForSelector('.title'); awa
 // 2 start
 await page.click('text=NEW GAME'); await page.waitForTimeout(1900); await shot('04_chapter_card'); await page.waitForTimeout(2200); await dismissDialogue();
 check('canvas renders pixels', (await nonBlack()) > 20000, String(await nonBlack())); await shot('05_boot_01');
+// 2b how-to-play guide
+await eden(() => window.__eden.game.openPause()); await page.waitForTimeout(300); await page.click('.pause >> text=HOW TO PLAY'); await page.waitForTimeout(300); check('in-game HOW TO PLAY guide opens', await page.locator('.guide').count() > 0); await shot('05b_guide'); await page.click('.guide .btn'); await page.click('.pause >> text=RESUME'); await page.waitForTimeout(200);
 // 3 movement
 const x0 = await eden(() => window.__eden.game.world.x); await page.keyboard.down('ArrowRight'); await page.waitForTimeout(900); await page.keyboard.up('ArrowRight'); const x1 = await eden(() => window.__eden.game.world.x); check('player moves right', x1 > x0 + 40, `${x0.toFixed(0)}→${x1.toFixed(0)}`);
 await page.keyboard.down('Space'); await page.waitForTimeout(120); const vy = await eden(() => window.__eden.game.world.vy); check('jump gives upward velocity', vy < 0, String(vy)); await page.keyboard.up('Space'); await page.waitForTimeout(900);
+// 3b infinite jump assist (J toggles)
+await page.keyboard.press('KeyJ'); await page.waitForTimeout(200); check('J enables infinite jump', await eden(() => window.__eden.settings.infiniteJump) === true);
+const yGround = await eden(() => window.__eden.game.world.y); let yMin = yGround; for (let i = 0; i < 8; i++) { await page.keyboard.down('Space'); await page.waitForTimeout(90); await page.keyboard.up('Space'); await page.waitForTimeout(110); yMin = Math.min(yMin, await eden(() => window.__eden.game.world.y)); }
+check('mid-air re-jumps climb far above a single jump (45 px)', yGround - yMin > 100, `climbed ${(yGround - yMin).toFixed(0)} px`);
+await page.keyboard.press('KeyJ'); await page.waitForTimeout(1500);
 // 4 editor flow (walk to terminal via teleport, as the terminal unlock is covered by unit tests)
 await eden(() => { const g = window.__eden.game; window.__eden.story.data.editorRevealed = true; g.openPanel(true); }); await page.waitForTimeout(700);
 const ta = page.locator('.ce-ta'); await ta.click(); await page.keyboard.press('Control+A'); await page.keyboard.type('player.speed = 3.5;\nplayer.jumpHeight = 120;\n'); await page.waitForTimeout(400);

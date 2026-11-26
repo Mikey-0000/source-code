@@ -17,7 +17,7 @@ export interface EnemyState { def: LevelDef['enemies'][number]; x: number; y: nu
 export class World {
   level: LevelDef; rule: RuleState; tick = 0;
   // player
-  x = 0; y = 0; vx = 0; vy = 0; onGround = false; facing = 1; coyote = 0; buffer = 0; jumping = false; hurt = 0; integrity = 100; dead = 0; landTimer = 0; riding: PlatformState | null = null; wasGround = false;
+  x = 0; y = 0; vx = 0; vy = 0; onGround = false; facing = 1; coyote = 0; buffer = 0; infiniteJump = false; jumping = false; hurt = 0; integrity = 100; dead = 0; landTimer = 0; riding: PlatformState | null = null; wasGround = false;
   checkpoint: { x: number; y: number }; activeCheckpoint = ''; collected = new Set<string>(); fuses = new Set<number>();
   platforms: PlatformState[]; enemies: EnemyState[]; hazards: Rect[] = []; events: WorldEvent[] = [];
   corruption = 0; hunter: { x: number; y: number } | null = null; cameraAlertCd = 0; cameraBeams: { id: string; x: number; y: number; a: number }[] = [];
@@ -105,7 +105,7 @@ export class World {
     // jump
     if (inp.jumpPressed) this.buffer = PHYS.buffer; else if (this.buffer > 0) this.buffer--;
     if (this.onGround) this.coyote = PHYS.coyote; else if (this.coyote > 0) this.coyote--;
-    if (this.buffer > 0 && this.coyote > 0 && this.hurt < 55) { this.vy = -jumpVelocity(this.jumpHeight, g); this.buffer = 0; this.coyote = 0; this.jumping = true; this.onGround = false; this.riding = null; this.events.push({ type: 'jump' }); }
+    if (((this.buffer > 0 && this.coyote > 0) || (this.infiniteJump && inp.jumpPressed)) && this.hurt < 55) { this.vy = -jumpVelocity(this.jumpHeight, g); this.buffer = 0; this.coyote = 0; this.jumping = true; this.onGround = false; this.riding = null; this.events.push({ type: 'jump' }); }
     if (this.jumping && !inp.jumpHeld && this.vy < -2) { this.vy *= PHYS.jumpCut; this.jumping = false; }
     if (this.vy >= 0) this.jumping = false;
     this.vy = Math.min(PHYS.maxFall + Math.max(0, g - 0.8) * 8, this.vy + g);

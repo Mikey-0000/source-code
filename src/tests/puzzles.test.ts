@@ -95,3 +95,15 @@ test('boss: full route is physically possible (stairs, bridge, exit ledge)', () 
   }
   assert.ok(w.x > 38 * 32 && w.y < 9 * 32, `reached far ledge x=${w.x / 32} y=${w.y / 32}`);
 });
+
+test('assist: infinite jump allows repeated mid-air jumps; off by default behaviour unchanged', () => {
+  const idle = { left: false, right: false, jumpHeld: false, jumpPressed: false };
+  const climb = (infinite: boolean) => {
+    const w = new World(L('boot_01')); w.infiniteJump = infinite; for (let i = 0; i < 30; i++) w.update(idle);
+    const y0 = w.y; let minY = y0;
+    for (let i = 0; i < 120; i++) { w.update({ left: false, right: false, jumpHeld: true, jumpPressed: i % 12 === 0 }); minY = Math.min(minY, w.y); }
+    return y0 - minY;
+  };
+  const normal = climb(false), infinite = climb(true);
+  assert.ok(infinite > normal + 60, `infinite ${infinite} should climb far higher than normal ${normal}`);
+});
