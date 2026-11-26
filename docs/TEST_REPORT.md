@@ -24,3 +24,8 @@ Boot gate and title; canvas actually renders; player moves and jumps; typing in 
 
 ## Not verified
 Real GPU hardware (only SwiftShader), real audio output (WebAudio runs but cannot be heard here), Safari/Firefox, touch devices, long-session performance, and screen-reader behaviour. Screenshots are in `docs/screenshots/`.
+
+## Update: look-and-feel pass
+- Unit tests: 38 pass / 0 fail (adds scoring and code-diff tests).
+- E2E (Playwright, `tests-e2e/run.mjs`): 26 checks pass, including trajectory graph, rewrite effect, results rank card and infinite-jump assist.
+- Not verified by ear: procedural audio (voices, corruption layer, footsteps) was never listened to in this environment.

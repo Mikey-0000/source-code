@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-26T22:47:13.602Z",
+  "date": "2026-11-26T23:03:09.428Z",
   "results": [
     {
       "name": "boot gate shown",
@@ -14,7 +14,7 @@
     {
       "name": "canvas renders pixels",
       "ok": true,
-      "detail": "147703"
+      "detail": "227084"
     },
     {
       "name": "in-game HOW TO PLAY guide opens",
@@ -24,12 +24,17 @@
     {
       "name": "player moves right",
       "ok": true,
-      "detail": "73→221"
+      "detail": "73→222"
     },
     {
       "name": "jump gives upward velocity",
       "ok": true,
       "detail": "-2.4852813742385704"
+    },
+    {
+      "name": "editor trajectory graph present",
+      "ok": true,
+      "detail": ""
     },
     {
       "name": "J enables infinite jump",
@@ -39,12 +44,17 @@
     {
       "name": "mid-air re-jumps climb far above a single jump (45 px)",
       "ok": true,
-      "detail": "climbed 163 px"
+      "detail": "climbed 103 px"
     },
     {
       "name": "live preview updates while typing",
       "ok": true,
       "detail": "PREVIEW apex 120 px · air 35 frames · range 123 px · launch "
+    },
+    {
+      "name": "rewrite effect triggered on compile",
+      "ok": true,
+      "detail": ""
     },
     {
       "name": "compile applies rules to the live world",
@@ -67,6 +77,11 @@
       "detail": "corruption=4"
     },
     {
+      "name": "results card shows a rank",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "exit shows SECTOR COMPLETE card",
       "ok": true,
       "detail": ""
@@ -79,32 +94,32 @@
     {
       "name": "level boot_01 renders",
       "ok": true,
-      "detail": "px=151192"
+      "detail": "px=227888"
     },
     {
       "name": "level boot_02 renders",
       "ok": true,
-      "detail": "px=149288"
+      "detail": "px=218149"
     },
     {
       "name": "level exc_01 renders",
       "ok": true,
-      "detail": "px=72096"
+      "detail": "px=130331"
     },
     {
       "name": "level exc_02 renders",
       "ok": true,
-      "detail": "px=94130"
+      "detail": "px=162580"
     },
     {
       "name": "level exc_03 renders",
       "ok": true,
-      "detail": "px=61018"
+      "detail": "px=117765"
     },
     {
       "name": "level boss_watcher renders",
       "ok": true,
-      "detail": "px=33489"
+      "detail": "px=77631"
     },
     {
       "name": "EDEN OS desktop opens",

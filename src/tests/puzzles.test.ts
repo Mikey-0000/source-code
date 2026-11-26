@@ -107,3 +107,17 @@ test('assist: infinite jump allows repeated mid-air jumps; off by default behavi
   const normal = climb(false), infinite = climb(true);
   assert.ok(infinite > normal + 60, `infinite ${infinite} should climb far higher than normal ${normal}`);
 });
+
+import { scoreRun, rankOf, diffRules } from '../game/systems/Scoring';
+test('scoring: perfect run is S, sloppy run is lower, never negative; ranks are monotonic', () => {
+  const perfect = scoreRun({ ms: 20000, deaths: 0, edits: 3, corruption: 0, memories: 1 });
+  assert.equal(perfect.rank, 'S'); assert.ok(perfect.total >= 1000);
+  const sloppy = scoreRun({ ms: 400000, deaths: 20, edits: 40, corruption: 100, memories: 0 }); assert.ok(sloppy.total < perfect.total && sloppy.total >= 0 && sloppy.rank === 'D');
+  assert.ok(scoreRun({ ms: 20000, deaths: 2, edits: 3, corruption: 0, memories: 0 }).total < scoreRun({ ms: 20000, deaths: 0, edits: 3, corruption: 0, memories: 0 }).total);
+  assert.deepEqual(['S', 'A', 'B', 'C', 'D'], [1000, 800, 600, 400, 0].map(rankOf));
+});
+test('diffRules: reports changed code lines only', () => {
+  const d = diffRules(['// c', 'player.speed = 2.8;', 'player.jumpHeight = 45;'], '// c\nplayer.speed = 2.8;\nplayer.jumpHeight = 150;');
+  assert.deepEqual(d, [{ kind: '-', text: 'player.jumpHeight = 45;' }, { kind: '+', text: 'player.jumpHeight = 150;' }]);
+  assert.deepEqual(diffRules(['a = 1;'], 'a = 1;'), []);
+});

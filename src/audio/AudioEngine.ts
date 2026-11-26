@@ -3,7 +3,7 @@ import { settings, onSettings } from '../core/Settings';
 type SfxName = 'jump' | 'land' | 'step' | 'compile' | 'error' | 'alert' | 'glitch' | 'beep' | 'type' | 'door' | 'death' | 'checkpoint' | 'memory' | 'hit' | 'laser' | 'click' | 'boot' | 'reveal' | 'eye';
 class AudioEngine {
   ctx: AudioContext | null = null; master!: GainNode; musicBus!: GainNode; sfxBus!: GainNode; noiseBuf!: AudioBuffer;
-  private droneNodes: { stop: () => void } | null = null; private droneTheme = ''; private tension = 0; private filt?: BiquadFilterNode; private lfoGain?: GainNode; private lastStep = 0;
+  private droneNodes: { stop: () => void } | null = null; private droneTheme = ''; private tension = 0; private filt?: BiquadFilterNode; private lfoGain?: GainNode; private lastStep = 0; floor: 'metal' | 'organic' | 'data' = 'metal'; private corruption = 0; private corrGain?: GainNode;
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') void this.ctx.resume(); return; }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext; if (!AC) return;
@@ -31,7 +31,12 @@ class AudioEngine {
     switch (n) {
       case 'jump': this.tone(180, .14, 'square', .12, 520); this.noise(.08, 1800, .05, 1, 'highpass'); break;
       case 'land': this.noise(.12, 380, .3); this.tone(70, .12, 'sine', .25, 40); break;
-      case 'step': if (this.ctx.currentTime - this.lastStep > .13) { this.lastStep = this.ctx.currentTime; this.noise(.05, 700 + Math.random() * 300, .08); } break;
+      case 'step': if (this.ctx.currentTime - this.lastStep > .13) {
+        this.lastStep = this.ctx.currentTime; const r = Math.random();
+        if (this.floor === 'metal') { this.noise(.05, 1400 + r * 600, .07, 6, 'bandpass'); this.tone(240 + r * 60, .04, 'square', .025, 150); }
+        else if (this.floor === 'organic') { this.noise(.09, 260 + r * 120, .13); this.tone(80 + r * 20, .08, 'sine', .08, 50); }
+        else { this.tone(1700 + r * 500, .02, 'square', .03); this.noise(.03, 5000, .04, 1, 'highpass'); }
+      } break;
       case 'compile': [523, 659, 784, 1046].forEach((f, i) => this.tone(f, .16, 'square', .09, undefined, i * .07)); this.tone(1046, .4, 'sine', .08, undefined, .3); break;
       case 'error': this.tone(110, .28, 'sawtooth', .16, 70); this.tone(117, .28, 'square', .08, 60, .02); break;
       case 'alert': for (let i = 0; i < 3; i++) { this.tone(880, .09, 'square', .1, undefined, i * .16); this.tone(660, .09, 'square', .1, undefined, i * .16 + .08); } break;
@@ -50,6 +55,20 @@ class AudioEngine {
       case 'eye': this.tone(48, 2, 'sine', .3, 30); this.tone(51, 2, 'sine', .25, 33); break;
     }
   }
+  /** Short synthetic "speech" blips per character: ADMIN is a low ring-modulated growl, ECHO a soft wavering tone, NULL a hushed whisper. */
+  voice(kind: 'admin' | 'echo' | 'null' | 'sys') {
+    const c = this.ctx; if (!c) return; if (kind === 'sys') { this.sfx('type'); return; } const t = c.currentTime, r = Math.random();
+    const o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter(); f.type = 'bandpass'; o.connect(f); f.connect(g); g.connect(this.sfxBus);
+    if (kind === 'admin') {
+      o.type = 'sawtooth'; o.frequency.value = 62 + r * 46; f.frequency.value = 300 + Math.random() * 700; f.Q.value = 7; g.gain.setValueAtTime(0.11, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+      const m = c.createOscillator(), mg = c.createGain(); m.frequency.value = 36 + Math.random() * 20; mg.gain.value = 0.1; m.connect(mg); mg.connect(g.gain); m.start(t); m.stop(t + 0.09);
+    } else if (kind === 'echo') {
+      o.type = 'sine'; o.frequency.setValueAtTime(520 + r * 380, t); o.frequency.linearRampToValueAtTime(500 + r * 380, t + 0.09); f.frequency.value = 900; f.Q.value = 1; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    } else { o.type = 'triangle'; o.frequency.value = 150 + r * 70; f.frequency.value = 500; f.Q.value = 2; g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06); }
+    o.start(t); o.stop(t + 0.14);
+  }
+  /** Corruption 0..100 fades in a dissonant layer (minor second, tritone, shimmering high tone). */
+  setCorruption(c: number) { this.corruption = c; if (this.corrGain && this.ctx) this.corrGain.gain.setTargetAtTime(Math.min(1, Math.max(0, (c - 25) / 75)) * 0.2, this.ctx.currentTime, 0.7); }
   /** Ambient drone per theme. Intensity 0..1 modulates filter and pulse (corruption / boss). */
   startDrone(theme: 'boot' | 'exception' | 'root' | 'title' | 'boss' | 'void') {
     const c = this.ctx; if (!c || this.droneTheme === theme) return; this.stopDrone(); this.droneTheme = theme;
@@ -61,10 +80,13 @@ class AudioEngine {
     const lfo = c.createOscillator(); lfo.frequency.value = theme === 'boss' ? .35 : .12; const lg = c.createGain(); lg.gain.value = 140; lfo.connect(lg); lg.connect(f.frequency); lfo.start(); this.lfoGain = lg;
     // machinery: low rumble + irregular thumps
     const n = c.createBufferSource(); n.buffer = this.noiseBuf; n.loop = true; const nf = c.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 120; const ng = c.createGain(); ng.gain.value = theme === 'root' ? .22 : .12; n.connect(nf); nf.connect(ng); ng.connect(g); n.start();
+    const cg = c.createGain(); cg.gain.value = 0; const cf = c.createBiquadFilter(); cf.type = 'lowpass'; cf.frequency.value = 1800; cf.connect(cg); cg.connect(this.musicBus); this.corrGain = cg;
+    const corrOscs = ([['sawtooth', base * 2 * 1.0595], ['square', base * 2 * 1.4142], ['sine', base * 16]] as [OscillatorType, number][]).map(([ty, fr]) => { const o = c.createOscillator(); o.type = ty; o.frequency.value = fr; const og = c.createGain(); og.gain.value = ty === 'sine' ? 0.5 : 0.28; o.connect(og); og.connect(cf); o.start(); return o; });
+    const trem = c.createOscillator(); trem.frequency.value = 5.5; const tg = c.createGain(); tg.gain.value = 0.12; trem.connect(tg); tg.connect(cg.gain); trem.start(); corrOscs.push(trem); this.setCorruption(this.corruption);
     let alive = true;
-    const thump = () => { if (!alive || !this.ctx) return; if (this.ctx.state === 'running') { this.tone(base * .5, .5, 'sine', .22 + this.tension * .15, base * .25, 0, this.musicBus); if (theme === 'root') this.noise(.05, 3000, .03, 3, 'bandpass'); } setTimeout(thump, (theme === 'boss' ? 1100 : 2600 - this.tension * 1400) + Math.random() * 1200); };
+    const thump = () => { if (!alive || !this.ctx) return; if (this.ctx.state === 'running') { if (this.corruption >= 66 && Math.random() < 0.4) this.noise(.06, 3000 + Math.random() * 3000, .05, 4, 'bandpass'); if (this.corruption >= 33 && Math.random() < 0.15) this.sfx('glitch'); this.tone(base * .5, .5, 'sine', .22 + this.tension * .15, base * .25, 0, this.musicBus); if (theme === 'root') this.noise(.05, 3000, .03, 3, 'bandpass'); } setTimeout(thump, (theme === 'boss' ? 1100 : 2600 - this.tension * 1400) + Math.random() * 1200); };
     setTimeout(thump, 800);
-    this.droneNodes = { stop: () => { alive = false; g.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0, c.currentTime, .3); setTimeout(() => { oscs.forEach(o => o.stop()); lfo.stop(); n.stop(); g.disconnect(); }, 1500); } };
+    this.droneNodes = { stop: () => { alive = false; g.gain.cancelScheduledValues(c.currentTime); g.gain.setTargetAtTime(0, c.currentTime, .3); setTimeout(() => { oscs.forEach(o => o.stop()); corrOscs.forEach(o => o.stop()); lfo.stop(); n.stop(); g.disconnect(); cg.disconnect(); if (this.corrGain === cg) this.corrGain = undefined; }, 1500); } };
   }
   setTension(t: number) { this.tension = t; if (this.filt && this.ctx) this.filt.frequency.setTargetAtTime(220 + t * 900, this.ctx.currentTime, .5); }
   stopDrone() { this.droneNodes?.stop(); this.droneNodes = null; this.droneTheme = ''; }

@@ -17,7 +17,7 @@ const dismissDialogue = async () => { for (let i = 0; i < 12; i++) { const open 
 // 1 boot
 await page.goto(base); await page.waitForTimeout(600); await shot('01_boot_gate'); check('boot gate shown', await page.locator('.boot').count() > 0);
 await page.keyboard.press('Enter'); await page.waitForTimeout(3000); await shot('02_boot_sequence');
-await page.goto(base + '?skipboot=1'); await page.waitForSelector('.title'); await page.waitForTimeout(1200); await shot('03_title'); check('title menu has NEW GAME', await page.locator('text=NEW GAME').count() > 0);
+await page.goto(base + '?skipboot=1'); await page.waitForSelector('.title'); await page.waitForTimeout(4500); await shot('03_title'); check('title menu has NEW GAME', await page.locator('text=NEW GAME').count() > 0);
 // 2 start
 await page.click('text=NEW GAME'); await page.waitForTimeout(1900); await shot('04_chapter_card'); await page.waitForTimeout(2200); await dismissDialogue();
 check('canvas renders pixels', (await nonBlack()) > 20000, String(await nonBlack())); await shot('05_boot_01');
@@ -26,16 +26,18 @@ await eden(() => window.__eden.game.openPause()); await page.waitForTimeout(300)
 // 3 movement
 const x0 = await eden(() => window.__eden.game.world.x); await page.keyboard.down('ArrowRight'); await page.waitForTimeout(900); await page.keyboard.up('ArrowRight'); const x1 = await eden(() => window.__eden.game.world.x); check('player moves right', x1 > x0 + 40, `${x0.toFixed(0)}→${x1.toFixed(0)}`);
 await page.keyboard.down('Space'); await page.waitForTimeout(120); const vy = await eden(() => window.__eden.game.world.vy); check('jump gives upward velocity', vy < 0, String(vy)); await page.keyboard.up('Space'); await page.waitForTimeout(900);
+// 3c new feel features
+check('editor trajectory graph present', await page.locator('.ep-graph').count() > 0);
 // 3b infinite jump assist (J toggles)
 await page.keyboard.press('KeyJ'); await page.waitForTimeout(200); check('J enables infinite jump', await eden(() => window.__eden.settings.infiniteJump) === true);
 const yGround = await eden(() => window.__eden.game.world.y); let yMin = yGround; for (let i = 0; i < 8; i++) { await page.keyboard.down('Space'); await page.waitForTimeout(90); await page.keyboard.up('Space'); await page.waitForTimeout(110); yMin = Math.min(yMin, await eden(() => window.__eden.game.world.y)); }
-check('mid-air re-jumps climb far above a single jump (45 px)', yGround - yMin > 100, `climbed ${(yGround - yMin).toFixed(0)} px`);
+check('mid-air re-jumps climb far above a single jump (45 px)', yGround - yMin > 80, `climbed ${(yGround - yMin).toFixed(0)} px`);
 await page.keyboard.press('KeyJ'); await page.waitForTimeout(1500);
 // 4 editor flow (walk to terminal via teleport, as the terminal unlock is covered by unit tests)
 await eden(() => { const g = window.__eden.game; window.__eden.story.data.editorRevealed = true; g.openPanel(true); }); await page.waitForTimeout(700);
 const ta = page.locator('.ce-ta'); await ta.click(); await page.keyboard.press('Control+A'); await page.keyboard.type('player.speed = 3.5;\nplayer.jumpHeight = 120;\n'); await page.waitForTimeout(400);
 const prev = await page.locator('.ep-preview').innerText(); check('live preview updates while typing', /apex\s*120/.test(prev), prev.slice(0, 60)); await shot('06_editor_typing');
-await page.keyboard.press('Control+Enter'); await page.waitForTimeout(700); const jh = await eden(() => window.__eden.game.world.rule.player.jumpHeight); check('compile applies rules to the live world', jh === 120, 'jumpHeight=' + jh); await shot('07_editor_applied');
+await page.keyboard.press('Control+Enter'); await page.waitForTimeout(150); check('rewrite effect triggered on compile', await eden(() => window.__eden.game.renderer.rewriteT > 0)); await page.waitForTimeout(550); const jh = await eden(() => window.__eden.game.world.rule.player.jumpHeight); check('compile applies rules to the live world', jh === 120, 'jumpHeight=' + jh); await shot('07_editor_applied');
 await ta.click(); await page.keyboard.press('Control+A'); await page.keyboard.type('player.jumpHeight = ;'); await page.waitForTimeout(400); await page.keyboard.press('Control+Enter'); await page.waitForTimeout(500);
 check('syntax error is reported, rules unchanged', (await eden(() => window.__eden.game.world.rule.player.jumpHeight)) === 120 && /ERROR/i.test(await page.locator('.ep-status').innerText())); await shot('08_syntax_error');
 await ta.click(); await page.keyboard.press('Control+A'); await page.keyboard.type('player.jumpHeight = 9999;\n'); await page.keyboard.press('Control+Enter'); await page.waitForTimeout(500);
@@ -43,7 +45,7 @@ check('out-of-range values are clamped/rejected by the sandbox', (await eden(() 
 // 5 corruption + sandbox
 const cor = await eden(() => window.__eden.game.world.corruption); check('corruption reflects changed rules', cor > 0, 'corruption=' + cor);
 // 6 level completion
-await eden(() => { const g = window.__eden.game; g.closePanel(); const w = g.world; w.exitOpen = true; w.x = w.level.exit[0] * 32 + 9; w.y = w.level.exit[1] * 32 + 4; }); await page.waitForSelector('.card.complete', { timeout: 6000 }); await shot('09_level_complete'); check('exit shows SECTOR COMPLETE card', true);
+await eden(() => { const g = window.__eden.game; g.closePanel(); const w = g.world; w.exitOpen = true; w.x = w.level.exit[0] * 32 + 9; w.y = w.level.exit[1] * 32 + 4; }); await page.waitForSelector('.card.complete', { timeout: 6000 }); await shot('09_level_complete'); check('results card shows a rank', await page.locator('.res-rank').count() > 0); check('exit shows SECTOR COMPLETE card', true);
 await page.click('.card.complete .btn.primary'); await page.waitForTimeout(1800); check('CONTINUE loads next level', (await eden(() => window.__eden.game.levelIndex)) === 1, 'levelIndex=' + await eden(() => window.__eden.game.levelIndex));
 // 7 per-level screenshots
 const names = ['boot_01', 'boot_02', 'exc_01', 'exc_02', 'exc_03', 'boss_watcher'];

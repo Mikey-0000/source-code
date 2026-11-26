@@ -17,6 +17,8 @@ import { story } from '../../narrative/StoryFlags';
 import { contribution, stageOf, STAGE_NAMES, STAGE_TEXT } from '../systems/Corruption';
 import { heightAt, airTime, jumpVelocity } from '../physics/Physics';
 import { emptySave } from '../../storage/SaveGame';
+import { scoreRun, diffRules } from '../systems/Scoring';
+import { fakePopup, fakeCrash } from '../../ui/Fake';
 
 export interface SceneHooks { onQuit(): void; onRoot(): void }
 
@@ -26,6 +28,7 @@ export class GameScene {
   world!: World; level!: LevelDef; levelIndex = 0; cam = { x: 0, y: 0 }; running = false; time = 0; acc = 0; last = 0;
   panelOpen = false; debug = false; busy = false; paused = false; editorFocused = false; arc: [number, number][] | null = null; selected: string | null = null;
   rulesSrc = ''; appliedSrc = ''; appliedState!: RuleState; stage = 0; glitch = 0; scripted: { frames: number; inp: InputState } | null = null; previewTimer = 0; warnedAdmin = false; shake = 0; hintIdx = 0; saveT = 0; lastBlindTotal = 0;
+  dilate = 0; kickY = 0; prevVy = 0; levelMs = 0; levelEdits = 0; rec: number[][] = []; ghost: number[][] | null = null; ghostI = 0; static bestGhost = new Map<string, number[][]>(); popupT = 30; textT = 4; crashPending = false;
 
   constructor(parent: HTMLElement, private hooks: SceneHooks) {
     this.root = el('div', 'game', parent); this.root.hidden = true;
@@ -35,7 +38,7 @@ export class GameScene {
     this.hud = new Hud(this.stageEl); this.dialogue = new DialogueBox(this.stageEl); this.banner = el('div', 'stage-banner', this.stageEl); this.banner.hidden = true; this.overlay = el('div', 'overlay', this.stageEl); this.overlay.hidden = true;
     this.panel = new EditorPanel(main); this.consoleP = new ConsolePanel(this.root);
     this.panel.onCompile = () => this.compile(); this.panel.onRestore = () => this.restoreDefaults(); this.panel.onHint = () => this.nextHint(); this.panel.onDebug = () => this.toggleDebug();
-    this.panel.editor.onChange = () => { clearTimeout(this.previewTimer); this.previewTimer = window.setTimeout(() => this.preview(), 140); };
+    this.panel.editor.onChange = () => { audio.sfx('type'); clearTimeout(this.previewTimer); this.previewTimer = window.setTimeout(() => this.preview(), 140); };
     this.panel.editor.onFocusChange = f => { this.editorFocused = f; this.updateBanner(); if (f) this.preview(); };
     this.panel.editor.root.addEventListener('ce-leave', () => this.updateBanner());
     new ResizeObserver(() => this.fit()).observe(this.stageEl); addEventListener('resize', () => this.fit());
@@ -61,6 +64,7 @@ export class GameScene {
     const cp = story.data.checkpoint[L.id]; const prior = this.priorCorruption();
     this.world = new World(L, res.state, cp ? { x: cp.x, y: cp.y } : undefined, prior + contribution(L, res.state));
     for (const m of L.memories) if (story.data.memories.includes(m.id)) this.world.collected.add(m.id);
+    this.levelMs = 0; this.levelEdits = 0; this.rec = []; this.ghostI = 0; this.ghost = GameScene.bestGhost.get(L.id) ?? null; this.crashPending = false; this.popupT = 30; audio.floor = L.theme === 'exception' ? 'organic' : L.theme === 'root' ? 'data' : 'metal';
     this.world.stats.deaths = 0; this.cam.x = this.world.x - VIEW_W / 2; this.cam.y = this.world.y - VIEW_H / 2; this.clampCam(true);
     this.panel.setLevel(L, this.rulesSrc, res.state); this.updateCorruption(true); this.hud.setObjective(L.objective); this.hud.setLocation(`CH.${L.chapter} ${L.chapterName} / ${L.name}`); this.hud.showHint(null); this.hintIdx = 0;
     story.data.levelIndex = this.levelIndex; story.save();
@@ -93,12 +97,19 @@ export class GameScene {
     const dt = Math.min(0.1, (now - this.last) / 1000); this.last = now; this.time += dt;
     const canPlay = !this.busy && !this.paused && !this.editorFocused && !this.dialogue.open && !!this.world;
     if (!this.busy && !this.dialogue.open && !this.root.hidden) this.handleKeys();
-    if (canPlay) { this.acc += dt; story.data.stats.playMs += dt * 1000; let first = true; while (this.acc >= 1 / 60) { this.acc -= 1 / 60; this.step(first); first = false; } } else this.acc = 0;
+    if (canPlay) { this.acc += dt; story.data.stats.playMs += dt * 1000; this.levelMs += dt * 1000; let first = true; while (this.acc >= 1 / 60) { this.acc -= 1 / 60; this.step(first); first = false; } } else this.acc = 0;
     input.endFrame();
+    this.dilate *= 0.97; this.kickY *= 0.8;
+    if (canPlay) {
+      this.textT -= dt; this.popupT -= dt;
+      if (this.stage >= 1 && this.textT <= 0) { this.hud.glitchText(this.stage >= 2 ? 0.3 : 0.14); this.textT = (this.stage >= 2 ? 1.5 : 3.5) + Math.random() * 3; }
+      if (this.stage >= 2 && this.popupT <= 0 && !this.dialogue.open && this.overlay.hidden) { fakePopup(this.stageEl); this.popupT = 22 + Math.random() * 25; }
+      if (this.crashPending && this.overlay.hidden && !this.dialogue.open) { this.crashPending = false; void this.crashSequence(); }
+    }
     this.updateCamera(); this.hudUpdate();
     this.glitch = Math.max(this.glitch * 0.93 - 0.002, 0); this.post.glitch = this.glitch + [0, 0.04, 0.1][this.stage] * (settings.reducedMotion ? 0 : (Math.sin(this.time * 3) > 0.7 ? 1 : 0.2)); this.post.flash = Math.max(0, this.post.flash * 0.9 - 0.01);
     this.post.aberr = 0.0007 + this.stage * 0.0008 + this.glitch * 0.003;
-    this.renderer.draw(this.vctx, this.world, this.cam, { debug: this.debug, editing: this.panelOpen, stage: this.stage, arc: this.panelOpen ? this.arc : null, selected: this.selected, time: this.time, paused: !canPlay });
+    this.renderer.draw(this.vctx, this.world, { x: this.cam.x, y: this.cam.y + this.kickY }, { dilate: this.dilate, ghost: this.ghostPose(), debug: this.debug, editing: this.panelOpen, stage: this.stage, arc: this.panelOpen ? this.arc : null, selected: this.selected, time: this.time, paused: !canPlay });
     if (this.shake > 0 && !settings.reducedMotion) { this.shake--; }
     this.post.present(this.view, this.time);
   }
@@ -113,18 +124,19 @@ export class GameScene {
   private step(first: boolean) {
     let inp: InputState;
     if (this.scripted && this.scripted.frames > 0) { inp = this.scripted.inp; this.scripted.frames--; } else inp = { left: input.held('left'), right: input.held('right'), jumpHeld: input.held('jump'), jumpPressed: first && input.pressed('jump') };
-    this.world.infiniteJump = settings.infiniteJump; this.world.update(inp);
+    this.prevVy = this.world.vy; this.world.infiniteJump = settings.infiniteJump; this.world.update(inp);
     for (const e of this.world.events) this.onEvent(e);
+    const w = this.world; if (w.dead === 0) { if (this.rec.length < 20000) this.rec.push([w.x, w.y, w.facing, w.vx, w.onGround ? 0 : 1]); this.ghostI++; }
   }
   private onEvent(e: World['events'][number]) {
     switch (e.type) {
-      case 'jump': audio.sfx('jump'); break; case 'land': audio.sfx('land'); break; case 'step': audio.sfx('step'); break;
+      case 'jump': audio.sfx('jump'); break; case 'land': audio.sfx('land'); if (this.prevVy > 5) this.kickY = Math.min(5, (this.prevVy - 5) * 0.9); break; case 'step': audio.sfx('step'); break;
       case 'hit': audio.sfx('hit'); this.glitch = Math.max(this.glitch, 0.6); this.post.flash = 0.5; break;
       case 'laser': this.consoleP.log('WARNING', 'Laser contact. ADMIN: "Entity terminated."'); break;
       case 'death': audio.sfx('death'); this.glitch = 1; story.data.stats.deaths++; this.shake = 12; break;
-      case 'respawn': audio.sfx('glitch'); this.hud.toast('RESTORED FROM CHECKPOINT'); break;
+      case 'respawn': if (this.rec.length > 90) this.ghost = this.rec; this.rec = []; this.ghostI = 0; audio.sfx('glitch'); this.hud.toast('RESTORED FROM CHECKPOINT'); break;
       case 'checkpoint': audio.sfx('checkpoint'); this.hud.toast('CHECKPOINT SAVED'); story.data.checkpoint[this.level.id] = { ...this.world.checkpoint }; story.data.rules[this.level.id] = this.appliedSrc; story.save(); break;
-      case 'memory': { audio.sfx('memory'); const m = this.level.memories.find(x => x.id === e.id)!; story.data.memories.push(m.id); story.save(); void this.say('ECHO · ' + m.title, [m.text], 'echo'); break; }
+      case 'memory': { audio.sfx('memory'); const m = this.level.memories.find(x => x.id === e.id)!; story.data.memories.push(m.id); story.save(); void this.memoryPlayback(m.title, m.text); break; }
       case 'trigger': if (e.event === 'reveal') void this.revealCutscene(); if (e.event === 'boss') void this.say('ADMIN', ['SECTOR 06. THE WATCHER sees everything within its range.', 'You are not on the list of things that are allowed to be seen. Or to see.'], 'admin'); break;
       case 'camera': audio.sfx('alert'); this.consoleP.log('WARNING', 'Security camera ' + e.id + ' has seen you. Suspicion rising.'); this.hud.toast('SEEN BY CAMERA'); break;
       case 'hunter': this.consoleP.log('ADMIN', 'HUNTER process dispatched to your location.'); this.hud.toast('HUNTER DISPATCHED'); audio.sfx('alert'); break;
@@ -159,7 +171,7 @@ export class GameScene {
     if (!res.ok) { this.reportErrors(res); return; }
     this.panel.editor.setErrors([]); const changedLines = this.diffLines(this.appliedSrc, src); const prevState = this.appliedState;
     this.world.applyRules(res.state); this.appliedSrc = src; this.appliedState = res.state; story.data.rules[L.id] = src; story.data.stats.compiles++;
-    this.panel.editor.setChanged(changedLines); this.panel.setStatus('APPLIED'); audio.sfx('compile');
+    this.panel.editor.setChanged(changedLines); this.panel.setStatus('APPLIED'); audio.sfx('compile'); this.levelEdits++; this.dilate = 1; this.renderer.rewrite(this.world.x + 7, this.world.y + 14); this.post.flash = Math.max(this.post.flash, 0.45); this.flashPanel('ok');
     this.consoleP.log('SUCCESS', 'Player properties updated.'); const ch = res.changes; for (const c of ch.slice(0, 8)) this.consoleP.log('INFO', `${c.path}: ${c.from} → ${c.to}`);
     if (!ch.length) this.consoleP.log('INFO', 'No differences from the default rules.');
     const prior = this.priorCorruption(); const before = this.world.corruption; this.world.corruption = prior + contribution(L, res.state); this.updateCorruption(false, before);
@@ -168,19 +180,20 @@ export class GameScene {
     if (this.world.corruption >= 100) this.consoleP.log('ADMIN', 'Corruption ceiling reached. This is unsustainable.');
   }
   private reportErrors(res: CompileResult) {
-    this.panel.editor.setErrors(res.errors); this.panel.setStatus('ERROR', true); audio.sfx('error'); this.glitch = Math.max(this.glitch, 0.25);
+    this.panel.editor.setErrors(res.errors); this.panel.setStatus('ERROR', true); audio.sfx('error'); this.flashPanel('bad'); this.glitch = Math.max(this.glitch, 0.25);
     for (const e of res.errors.slice(0, 4)) this.consoleP.log('ERROR', `line ${e.line}:${e.col} — ${e.msg}${e.hint ? ' · ' + e.hint : ''}`);
     this.consoleP.log('INFO', 'Nothing was applied. The game state is unchanged.');
   }
   restoreDefaults() {
     const L = this.level; const src = L.template.join('\n'); this.panel.editor.setSource(src); const res = compileRules({ source: src, schema: L.schema, lockedLines: L.locked });
     this.world.applyRules(res.state); this.appliedSrc = src; this.appliedState = res.state; story.data.rules[L.id] = src; const before = this.world.corruption; this.world.corruption = this.priorCorruption() + contribution(L, res.state); this.updateCorruption(false, before);
-    this.consoleP.log('SUCCESS', 'Default rules restored. Guaranteed recovery.'); this.panel.setStatus('RESTORED'); audio.sfx('compile'); story.save(); this.preview();
+    this.consoleP.log('SUCCESS', 'Default rules restored. Guaranteed recovery.'); this.panel.setStatus('RESTORED'); audio.sfx('compile'); this.renderer.rewrite(this.world.x + 7, this.world.y + 14); this.flashPanel('ok'); story.save(); this.preview();
   }
   private updateCorruption(silent: boolean, before?: number) {
     const s = stageOf(this.world.corruption); const prev = before === undefined ? s : stageOf(before); this.stage = s; this.hud.setCorruption(this.world.corruption, STAGE_NAMES[s]);
     if (!silent && s !== prev) { this.consoleP.log(s > prev ? 'WARNING' : 'INFO', `Corruption ${STAGE_NAMES[s]}: ${STAGE_TEXT[s]}`); if (s > prev) { audio.sfx('alert'); void this.say('ADMIN', [s === 1 ? 'Anomaly detected. Cameras online.' : 'ANOMALY CRITICAL. HUNTER DISPATCHED.'], 'admin'); } }
-    audio.setTension(s / 2);
+    audio.setTension(s / 2); audio.setCorruption(this.world.corruption);
+    if (!silent && s === 2 && prev < 2 && !story.bool('crash_' + this.level.id)) { story.set('crash_' + this.level.id, true); if (!settings.reducedMotion && settings.flashes) this.crashPending = true; }
   }
   nextHint() { const h = this.level.hints; if (!settings.hints) { this.consoleP.log('INFO', 'Hints are disabled in settings.'); return; } const t = h[this.hintIdx % h.length]; this.hintIdx++; this.consoleP.log('INFO', 'HINT: ' + t); this.hud.showHint(t); setTimeout(() => this.hud.showHint(null), 9000); }
   private preview() {
@@ -189,6 +202,7 @@ export class GameScene {
     this.panel.editor.setErrors([]); this.panel.setStatus(res.source === this.appliedSrc ? 'APPLIED' : 'PENDING');
     const s = res.state; const j = (s.player?.jumpHeight as number) ?? 45, sp = (s.player?.speed as number) ?? 2.8, g = (s.world?.gravity as number) ?? 0.8;
     const air = airTime(j, g), range = sp * air, v = jumpVelocity(j, g); this.panel.setPreview(`PREVIEW  apex <b>${j}</b> px · air <b>${air}</b> frames · range <b>${Math.round(range)}</b> px · launch ${v.toFixed(1)} px/f`);
+    const dv = (o: string, p: string, d: number) => Number(L.schema.objects[o]?.props[p]?.default ?? d); this.panel.setGraph({ j, sp, g }, { j: dv('player', 'jumpHeight', 45), sp: dv('player', 'speed', 2.8), g: dv('world', 'gravity', 0.8) });
     const w = this.world; const pts: [number, number][] = []; const x0 = w.x + 7, y0 = w.y + 28; const dir = w.facing || 1; const dyn = w.dynamicSolids();
     for (let n = 0; n <= air + 4; n += 1) { const x = x0 + dir * sp * n, y = y0 - heightAt(n, j, g); if (n > 3 && (w.solidTile(Math.floor(x / TILE), Math.floor(y / TILE)) || dyn.some(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h))) break; pts.push([x, y]); }
     this.arc = pts;
@@ -227,13 +241,31 @@ export class GameScene {
     audio.sfx('death'); this.glitch = 1; this.post.flash = 0.8; this.consoleP.log('SUCCESS', 'THE WATCHER overwritten. Its eye is closed for good.'); await sleep(1200);
     await this.say('ADMIN', ['That process was mine.', 'Do you know how long I watched through it?', 'Keep going. Everything beyond this door is ROOT. I own ROOT.'], 'admin'); this.hud.toast('EXIT OPEN');
   }
+  private flashPanel(kind: 'ok' | 'bad') { const r = this.panel.root; r.classList.remove('flash-ok', 'flash-bad'); void r.offsetWidth; r.classList.add('flash-' + kind); }
+  private ghostPose() { if (!settings.ghost || !this.ghost || this.ghostI >= this.ghost.length) return null; const f = this.ghost[this.ghostI]; return { x: f[0], y: f[1], f: f[2], vx: f[3], air: f[4] === 1 }; }
+  private async crashSequence() { this.busy = true; await fakeCrash(this.stageEl); this.busy = false; }
+  /** ECHO's recovered memory plays back as a terminal session; the world waits. */
+  private async memoryPlayback(title: string, text: string) {
+    this.busy = true; input.enabled = false; const o = el('div', 'mem-play', this.stageEl); const pre = el('pre', '', o); const G = '█▓▒░#%&@01';
+    for (const l of ['> mount /entities/echo.memory', '> checksum ............ DAMAGED', '> recovering fragment...']) { pre.textContent += l + '\n'; audio.sfx('type'); await sleep(170); }
+    const bar = el('div', 'mem-bar', o); const pre2 = el('pre', '', o); for (let i = 0; i <= 20; i++) { bar.textContent = '[' + '#'.repeat(i) + '.'.repeat(20 - i) + '] ' + i * 5 + '%'; await sleep(28); }
+    audio.sfx('memory'); this.glitch = 1; const base = `\n[ ${title} ]\n\n`;
+    for (let i = 0; i < text.length; i++) { pre2.textContent = base + text.slice(0, i) + (i % 3 === 0 ? G[Math.floor(Math.random() * G.length)] : ''); if (i % 2 === 0) audio.voice('echo'); await sleep(26); }
+    pre2.textContent = base + text; el('div', 'mem-hint', o, '[E] close');
+    await new Promise<void>(res => { const done = () => { removeEventListener('keydown', onKey); o.removeEventListener('click', done); res(); }; const onKey = (e: KeyboardEvent) => { if (['KeyE', 'Enter', 'Space', 'Escape'].includes(e.code)) { e.preventDefault(); done(); } }; addEventListener('keydown', onKey); o.addEventListener('click', done); });
+    audio.sfx('click'); o.remove(); input.enabled = true; input.endFrame(); this.busy = false;
+  }
   private async completeLevel() {
     this.busy = true; audio.sfx('checkpoint'); const L = this.level; const w = this.world; story.set('cc_' + L.id, contribution(L, this.appliedState)); if (!story.data.completed.includes(L.id)) story.data.completed.push(L.id);
     story.data.levelIndex = Math.min(this.levelIndex + 1, LEVELS.length - 1); delete story.data.checkpoint[L.id]; story.data.rules[L.id] = this.appliedSrc; story.data.corruption = w.corruption; story.save();
     this.panel.editor.ta.blur(); this.glitch = 1; await sleep(500);
     const mems = L.memories.filter(m => w.collected.has(m.id)).length; const next = this.levelIndex + 1 < LEVELS.length;
+    const sc = scoreRun({ ms: this.levelMs, deaths: w.stats.deaths, edits: this.levelEdits, corruption: w.corruption, memories: mems }); const prevBest = story.num('best_' + L.id); const isBest = sc.total > prevBest;
+    if (isBest) { story.set('best_' + L.id, sc.total); story.set('rank_' + L.id, sc.rank); } const gb = GameScene.bestGhost.get(L.id); if (!gb || this.rec.length < gb.length) GameScene.bestGhost.set(L.id, this.rec);
     this.overlay.hidden = false; this.overlay.innerHTML = ''; const card = el('div', 'card complete', this.overlay); el('div', 'card-k', card, 'SECTOR COMPLETE'); el('h2', 'glitch-text', card, L.name).dataset.text = L.name;
-    el('div', 'card-row', card, `Rule applications: ${story.data.stats.compiles}   ·   Memories: ${mems}/${L.memories.length}   ·   Corruption: ${Math.round(w.corruption)}% ${STAGE_NAMES[this.stage]}`);
+    const row = el('div', 'res-row', card); el('div', 'res-rank rank-' + sc.rank, row, sc.rank); const tot = el('div', 'res-total', row); el('b', '', tot, sc.total + ' pts'); el('span', 'muted', tot, isBest ? (prevBest ? 'NEW BEST' : 'FIRST CLEAR') : 'best ' + prevBest);
+    const parts = el('div', 'res-parts', card); for (const p of sc.parts) { const r = el('div', 'res-part', parts); el('span', '', r, p.label); el('b', p.value < 0 ? 'neg' : 'pos', r, (p.value > 0 && p.label !== 'Base' ? '+' : '') + p.value); }
+    el('div', 'card-k', card, 'YOUR CODE'); const pre = el('pre', 'res-diff', card); const diff = diffRules(L.template, this.appliedSrc); if (!diff.length) pre.textContent = '(no changes — default rules)'; else for (const d of diff) el('span', d.kind === '+' ? 'add' : 'del', pre, `${d.kind} ${d.text}\n`);
     if (!next) el('div', 'card-row', card, 'Beyond this door: ROOT.');
     const b = el('button', 'btn primary', card, next ? 'CONTINUE' : 'ENTER ROOT'); b.focus(); await new Promise<void>(res => b.addEventListener('click', () => res()));
     this.overlay.hidden = true; audio.sfx('click');

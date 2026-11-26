@@ -49,3 +49,12 @@ Every changed rule raises corruption (doors, lasers, enemies, platforms and came
 - Lower `world.gravity` makes you float: longer air time, longer range (Sector 02).
 - Speed × air time is your jump range; height and gravity set the air time.
 - You can't break the game: invalid code is rejected, and RESTORE DEFAULTS always recovers.
+
+## Feel & feedback features
+
+- **Rewrite flash** – every successful compile triggers a shockwave, glitch mosaic and a green editor flash; errors shake the panel red.
+- **Trajectory graph** – the editor shows your jump arc against the default arc (apex and range in px) before you commit.
+- **Ghost replay** – after a death, your previous attempt replays as a faint ghost. Toggle in Settings → *Ghost replay*.
+- **Scoring & ranks** – each sector ends with a results card (S/A/B/C/D) scoring time, deaths, edits, corruption and memories, plus a diff of your code. Best score and rank are saved.
+- **Memory playback** – ECHO memories play back as a terminal sequence (E / Enter / Space / Esc to close).
+- **Corruption** – at UNSTABLE the world glitches and HUD text scrambles; at CRITICAL fake pop-ups, a dissonant audio layer and a one-time simulated crash appear (progress is always safe).

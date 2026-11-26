@@ -6,6 +6,7 @@ import { CodeEditor } from '../editor/CodeEditor';
 import { FEATURE_INFO, type RuleSchema, type RuleState } from '../editor/RuleSchema';
 import type { LevelDef } from '../game/levels/LevelTypes';
 import type { RuleError } from '../editor/RuleValidator';
+import { airTime, heightAt } from '../game/physics/Physics';
 
 // ───────────── HUD ─────────────
 export class Hud {
@@ -24,8 +25,14 @@ export class Hud {
   }
   setIntegrity(n: number) { const v = Math.max(0, Math.round(n)); this.integ.style.width = v + '%'; this.integTxt.textContent = v + '%'; this.integ.classList.toggle('low', v <= 34); }
   setCorruption(n: number, stage: string) { this.corrFill.style.width = Math.min(100, n) + '%'; this.corrTxt.textContent = `CORRUPTION ${Math.round(n)}% · ${stage}`; this.corrFill.dataset.stage = stage; }
-  setObjective(t: string) { this.obj.textContent = t; }
-  setLocation(t: string) { this.loc.textContent = t; }
+  private objText = ''; private locText = '';
+  setObjective(t: string) { this.objText = t; this.obj.textContent = t; }
+  setLocation(t: string) { this.locText = t; this.loc.textContent = t; }
+  /** Briefly corrupt HUD text (swap some letters for glitch glyphs), then restore it. */
+  glitchText(amount: number) {
+    const G = '█▓▒░#%&@01<>/\\'; const bad = (t: string) => t.replace(/[A-Za-z0-9]/g, ch => Math.random() < amount ? G[Math.floor(Math.random() * G.length)] : ch);
+    this.obj.textContent = bad(this.objText); this.loc.textContent = bad(this.locText); setTimeout(() => { this.obj.textContent = this.objText; this.loc.textContent = this.locText; }, 190);
+  }
   prompt(t: string | null) { this.promptEl.hidden = !t; if (t) this.promptEl.textContent = t; }
   setTimer(frac: number | null, txt = '') { this.timer.hidden = frac === null; if (frac !== null) { this.timerFill.style.width = frac * 100 + '%'; this.timerTxt.textContent = txt; } }
   setBoss(frac: number | null) { this.bossBar.hidden = frac === null; if (frac !== null) this.bossFill.style.width = frac * 100 + '%'; }
@@ -50,7 +57,7 @@ export class DialogueBox {
     this.open = true; this.root.hidden = false; this.root.dataset.mod = mod; this.who.textContent = speaker; input.enabled = false;
     for (const line of lines) {
       this.txt.textContent = ''; this.skip = false; const delay = 24 / Math.max(0.3, settings.dialogueSpeed);
-      for (let i = 0; i < line.length && !this.skip; i++) { this.txt.textContent = line.slice(0, i + 1); if (i % 2 === 0) audio.sfx('type'); await sleep(delay); if (this.keyAdvance()) this.skip = true; }
+      for (let i = 0; i < line.length && !this.skip; i++) { this.txt.textContent = line.slice(0, i + 1); if (i % 2 === 0) audio.voice(mod); await sleep(delay); if (this.keyAdvance()) this.skip = true; }
       this.txt.textContent = line; await sleep(80);
       await new Promise<void>(res => { this.resolveFn = res; const onKey = (e: KeyboardEvent) => { if (['KeyE', 'Enter', 'Space', 'Escape'].includes(e.code)) { e.preventDefault(); done(); } }; const done = () => { removeEventListener('keydown', onKey); this.root.removeEventListener('click', done); res(); }; addEventListener('keydown', onKey); this.root.addEventListener('click', done); });
       audio.sfx('click');
@@ -71,14 +78,14 @@ export class ConsolePanel {
 
 // ───────────── Editor panel (editor + docs / inspector / variables) ─────────────
 export class EditorPanel {
-  root: HTMLElement; editor: CodeEditor; private tabs: HTMLElement; private pane: HTMLElement; private previewEl: HTMLElement; private status: HTMLElement; private fileTab: HTMLElement; private docsEl: HTMLElement; private inspEl: HTMLElement; private varsEl: HTMLElement;
+  root: HTMLElement; editor: CodeEditor; private tabs: HTMLElement; private pane: HTMLElement; private previewEl: HTMLElement; private status: HTMLElement; private fileTab: HTMLElement; private docsEl: HTMLElement; private inspEl: HTMLElement; private varsEl: HTMLElement; private graph!: HTMLCanvasElement;
   onCompile: () => void = () => {}; onRestore: () => void = () => {}; onHint: () => void = () => {}; onDebug: () => void = () => {};
   level!: LevelDef; private active: 'docs' | 'inspector' | 'variables' = 'docs'; private applied: RuleState = {};
   constructor(parent: HTMLElement) {
     this.root = el('aside', 'editor-panel', parent); this.root.setAttribute('aria-label', 'Rule editor');
     const head = el('div', 'ep-head', this.root); this.fileTab = el('div', 'ep-file', head, 'player.rules.js'); this.status = el('div', 'ep-status', head, 'UNAUTHORISED');
     this.editor = new CodeEditor(this.root);
-    this.previewEl = el('div', 'ep-preview', this.root);
+    this.previewEl = el('div', 'ep-preview', this.root); this.graph = el('canvas', 'ep-graph', this.root); this.graph.width = 400; this.graph.height = 96; this.graph.setAttribute('aria-label', 'Jump arc graph: green is your pending rules, grey is the default');
     const bar = el('div', 'ep-buttons', this.root);
     const mk = (t: string, cls: string, fn: () => void, title?: string) => { const b = el('button', 'btn ' + cls, bar, t); b.addEventListener('click', () => { audio.sfx('click'); fn(); }); if (title) b.title = title; return b; };
     mk('COMPILE & APPLY', 'primary', () => this.onCompile(), 'Ctrl+Enter'); mk('RESTORE DEFAULTS', '', () => this.onRestore());
@@ -95,6 +102,19 @@ export class EditorPanel {
   }
   setStatus(t: string, bad = false) { this.status.textContent = t; this.status.classList.toggle('bad', bad); }
   setPreview(html: string) { this.previewEl.innerHTML = html; }
+  /** Live graph of the jump arc (height vs distance): pending rules in green over the defaults in grey, with 32 px tile gridlines. */
+  setGraph(cur: { j: number; sp: number; g: number }, def: { j: number; sp: number; g: number }) {
+    const c = this.graph, x = c.getContext('2d')!; const W = c.width, H = c.height, padL = 8, base = H - 14; x.clearRect(0, 0, W, H); x.fillStyle = '#08080a'; x.fillRect(0, 0, W, H);
+    const arc = (r: { j: number; sp: number; g: number }) => { const n = airTime(r.j, r.g); const pts: [number, number][] = []; for (let i = 0; i <= n; i++) pts.push([r.sp * i, heightAt(i, r.j, r.g)]); return pts; };
+    const A = arc(cur), B = arc(def); const maxX = Math.max(160, ...A.map(p => p[0]), ...B.map(p => p[0])) * 1.06, maxY = Math.max(64, cur.j, def.j) * 1.18; const sx = (W - padL - 6) / maxX, sy = (base - 6) / maxY;
+    x.strokeStyle = '#17171c'; x.lineWidth = 1; for (let gx = 0; gx <= maxX; gx += 32) { x.beginPath(); x.moveTo(padL + gx * sx + .5, 4); x.lineTo(padL + gx * sx + .5, base); x.stroke(); } for (let gy = 0; gy <= maxY; gy += 32) { x.beginPath(); x.moveTo(padL, base - gy * sy + .5); x.lineTo(W - 4, base - gy * sy + .5); x.stroke(); }
+    x.strokeStyle = '#35353b'; x.beginPath(); x.moveTo(padL, base + .5); x.lineTo(W - 4, base + .5); x.stroke();
+    const line = (pts: [number, number][], col: string, dash: number[], w: number) => { x.setLineDash(dash); x.strokeStyle = col; x.lineWidth = w; x.beginPath(); pts.forEach(([px, py], i) => { const X = padL + px * sx, Y = base - py * sy; if (i) x.lineTo(X, Y); else x.moveTo(X, Y); }); x.stroke(); x.setLineDash([]); };
+    line(B, '#6b6b75', [4, 3], 1); line(A, '#53ff9a', [], 2);
+    const apex = A.reduce((m, p) => p[1] > m[1] ? p : m, A[0]); const end = A[A.length - 1]; x.fillStyle = '#53ff9a'; x.font = '10px monospace';
+    x.fillRect(padL + apex[0] * sx - 2, base - apex[1] * sy - 2, 4, 4); x.fillText(`apex ${Math.round(apex[1])}px`, Math.min(W - 70, padL + apex[0] * sx + 6), Math.max(10, base - apex[1] * sy - 4)); x.fillText(`range ${Math.round(end[0])}px`, Math.min(W - 80, padL + end[0] * sx - 30), base + 11);
+    x.fillStyle = '#6b6b75'; x.fillText('default', padL + 4, 11);
+  }
   private buildDocs(schema: RuleSchema) {
     const d = this.docsEl; d.innerHTML = '';
     const sec = (title: string) => { const s = el('details', 'doc', d); s.open = title === 'OBJECTS'; el('summary', '', s, title); return s; };

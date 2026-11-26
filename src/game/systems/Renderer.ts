@@ -7,14 +7,15 @@ import { hash2 } from '../../core/Util';
 import { settings } from '../../core/Settings';
 import { PHYS } from '../physics/Physics';
 import { Particles } from '../../effects/Particles';
+import { Fx, tinted, TINTS } from '../../effects/Fx';
 import type { LevelDef } from '../levels/LevelTypes';
 import type { World } from './World';
 
-export interface DrawOpts { debug: boolean; editing: boolean; stage: number; arc: [number, number][] | null; selected: string | null; time: number; paused: boolean }
+export interface DrawOpts { debug: boolean; editing: boolean; stage: number; arc: [number, number][] | null; selected: string | null; time: number; paused: boolean; dilate?: number; ghost?: { x: number; y: number; f: number; vx: number; air: boolean } | null }
 export interface Cam { x: number; y: number }
 
 export class Renderer {
-  A: AssetSet = assets(); tiles!: HTMLCanvasElement; bg: BgLayer[] = []; level!: LevelDef; light: HTMLCanvasElement; lctx: Ctx; particles = new Particles();
+  A: AssetSet = assets(); tiles!: HTMLCanvasElement; bg: BgLayer[] = []; level!: LevelDef; light: HTMLCanvasElement; lctx: Ctx; particles = new Particles(); fx = new Fx(); rewriteT = 0; private sq = 0; private prevVy = 0; private trail: { x: number; y: number; w: number; h: number; spr: HTMLCanvasElement }[] = [];
   private animT = 0; private animKey = ''; private doorAmt = new Map<string, number>(); private lastTick = -1; ghostT = 0;
   constructor() { const [c, x] = canvas(VIEW_W, VIEW_H); this.light = c; this.lctx = x; }
   setLevel(level: LevelDef) { this.level = level; this.tiles = renderTileLayer(level.grid, level.theme); this.bg = buildBackground(level.theme); this.doorAmt.clear(); this.particles.list = []; }
@@ -25,8 +26,11 @@ export class Renderer {
     // background
     ctx.fillStyle = theme === 'exception' ? '#0b0405' : theme === 'root' ? '#050806' : '#060607'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     for (const l of this.bg) { const off = -Math.round((cx * l.factor) % 1024); const yy = Math.round(-cy * l.factor * 0.35 - 20 * (1 - l.factor)); for (let k = -1; k <= 1; k++) ctx.drawImage(l.canvas, off + k * 1024, yy); }
+    this.fx.drawAdminEye(ctx, t, w.x - cx, w.y - cy, o.stage, o.dilate ?? 0, theme);
+    this.fx.drawRain(ctx, cx, cy, t, theme, o.stage);
     // tiles
     ctx.drawImage(this.tiles, cx, cy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+    this.drawTileGlitch(ctx, w, cx, cy, t, o.stage);
     this.drawSpikes(ctx, w, cx, cy);
     this.drawDecor(ctx, w, cx, cy, t);
     this.drawProps(ctx, w, cx, cy, t, o);
@@ -37,6 +41,8 @@ export class Renderer {
     this.drawBoss(ctx, w, cx, cy, t, o);
     this.drawPlayer(ctx, w, cx, cy, t, o);
     this.particles.draw(ctx, cx, cy);
+    this.fx.drawRings(ctx, cx, cy); this.fx.drawDebris(ctx, Number(w.rule.world?.gravity ?? 0.8), t, 1 / 60);
+    this.fx.drawShafts(ctx, cx, t, theme); this.fx.drawFog(ctx, cx, t, theme);
     if (o.arc) this.drawArc(ctx, o.arc, cx, cy, t);
     if (o.editing || o.debug) this.drawExitMarker(ctx, w, cx, cy, t);
     this.drawLighting(ctx, w, cx, cy, t);
@@ -44,6 +50,26 @@ export class Renderer {
     // corruption tint & slices
     if (o.stage >= 1) { ctx.fillStyle = `rgba(255,38,61,${o.stage === 1 ? 0.03 : 0.07})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
     if (o.stage >= 2 && !settings.reducedMotion && !o.paused) { const f = Math.floor(t * 8); for (let i = 0; i < 3; i++) { const y = Math.floor(hash2(f, i, 3) * VIEW_H), h = 2 + Math.floor(hash2(f, i, 4) * 6), dx = Math.floor((hash2(f, i, 5) - 0.5) * 24); if (hash2(f, i, 6) > 0.55) ctx.drawImage(ctx.canvas, 0, y, VIEW_W, h, dx, y, VIEW_W, h); } }
+    if (this.rewriteT > 0) {
+      ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${this.rewriteT})`; const box = (r: { x: number; y: number; w: number; h: number }) => ctx.strokeRect(Math.round(r.x - cx) - 1.5, Math.round(r.y - cy) - 1.5, r.w + 3, r.h + 3);
+      for (const r of w.dynamicSolids()) box(r); for (const l of this.level.lasers) box(w.laserRect(l)); for (const e of w.enemies) box(w.enemyRect(e));
+      this.fx.drawRewrite(ctx, this.rewriteT, t); this.rewriteT = Math.max(0, this.rewriteT - 1 / 36);
+    }
+  }
+  /** Call when new rules are applied: shockwave from NULL, glitch mosaic, snap-flash of everything the rules can change. */
+  rewrite(x: number, y: number) { this.rewriteT = 1; this.fx.ring(x, y, '#53ff9a', 0); this.fx.ring(x, y, '#ff263d', 6, 40); this.fx.ring(x, y, '#e5e5e5', 12, 46); this.particles.emit(x, y, 50, { col: ['#53ff9a', '#e5e5e5', '#ff263d'], speed: 3, life: 34, g: 0 }); }
+  private drawTileGlitch(ctx: Ctx, w: World, cx: number, cy: number, t: number, stage: number) {
+    if (stage < 1 || settings.reducedMotion) return; const f = Math.floor(t * (stage >= 2 ? 9 : 5)); const thr = stage >= 2 ? 0.965 : 0.988;
+    const x0 = Math.max(0, Math.floor(cx / TILE)), x1 = Math.min(w.w - 1, Math.floor((cx + VIEW_W) / TILE)), y0 = Math.max(0, Math.floor(cy / TILE)), y1 = Math.min(w.h - 1, Math.floor((cy + VIEW_H) / TILE));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      if (!w.solidTile(x, y)) continue; const h = hash2(x * 31 + y, f, 9); if (h < thr) continue;
+      const dx = Math.round((hash2(x, f, 1) - 0.5) * 10), dy = Math.round((hash2(y, f, 2) - 0.5) * 6);
+      ctx.drawImage(this.tiles, x * TILE, y * TILE, TILE, TILE, x * TILE - cx + dx, y * TILE - cy + dy, TILE, TILE); ctx.fillStyle = h > 0.995 ? 'rgba(255,38,61,.35)' : 'rgba(83,255,154,.14)'; ctx.fillRect(x * TILE - cx + dx, y * TILE - cy + dy, TILE, TILE);
+    }
+  }
+  private drawGhost(ctx: Ctx, g: NonNullable<DrawOpts['ghost']>, cx: number, cy: number, t: number) {
+    const sheets = g.f >= 0 ? this.A.nullR : this.A.nullL; const anim: NullAnim = g.air ? 'jump' : Math.abs(g.vx) > 0.3 ? 'run' : 'idle'; const n = NULL_FRAMES[anim]; const fr = anim === 'jump' ? 0 : Math.floor(t * (anim === 'run' ? 9 : 4)) % n;
+    ctx.globalAlpha = 0.34; ctx.drawImage(tinted(sheets[anim].frames[fr], TINTS.boot.accent), Math.round(g.x + PHYS.hitW / 2 - NULL_W / 2 - cx), Math.round(g.y + PHYS.hitH - NULL_H + 2 - cy)); ctx.globalAlpha = 1;
   }
 
   // ---------- helpers ----------
@@ -128,19 +154,35 @@ export class Renderer {
     else if (Math.abs(w.vx) > 0.3) { anim = 'run'; frame = Math.floor(t * (6 + Math.abs(w.vx) * 3)) % NULL_FRAMES.run; }
     else { anim = 'idle'; frame = Math.floor(t * 4) % NULL_FRAMES.idle; }
     const spr = sheets[anim].frames[frame]; const sx = Math.round(w.x + PHYS.hitW / 2 - NULL_W / 2 - cx), sy = Math.round(w.y + PHYS.hitH - NULL_H + 2 - cy);
+    if (o.ghost && w.dead === 0) this.drawGhost(ctx, o.ghost, cx, cy, t);
     // contact shadow
-    if (w.onGround && w.dead === 0) { ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(sx + 8, sy + NULL_H - 3, 16, 2); }
+    if (w.onGround && w.dead === 0) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(sx + 8, sy + NULL_H - 3, 16, 2); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(sx + 5, sy + NULL_H - 2, 22, 1); }
+    // speed trail
+    if (!settings.reducedMotion) for (let i = 0; i < this.trail.length; i++) { const tr = this.trail[i]; ctx.globalAlpha = 0.07 + 0.05 * i; ctx.drawImage(tr.spr, Math.round(tr.x - cx), Math.round(tr.y - cy), tr.w, tr.h); }
+    ctx.globalAlpha = 1;
     if (w.hurt > 0 && w.dead === 0 && Math.floor(t * 20) % 2 === 0) ctx.globalAlpha = 0.45;
     // corruption afterimages
     if (o.stage >= 2 && !settings.reducedMotion && w.dead === 0) { ctx.globalAlpha = 0.25; ctx.drawImage(spr, sx + Math.round(Math.sin(t * 9) * 3), sy); ctx.globalAlpha = w.hurt > 0 && Math.floor(t * 20) % 2 === 0 ? 0.45 : 1; }
-    ctx.drawImage(spr, sx, sy); ctx.globalAlpha = 1;
-    if (this.lastTick !== w.tick) { this.lastTick = w.tick; for (const e of w.events) { const fx = w.x + 7, fy = w.y + 28;
-      if (e.type === 'jump') this.particles.emit(fx, fy, 6, { col: [C.bone, C.steel2], speed: 1, dir: -Math.PI / 2, spread: Math.PI, life: 16, g: 0.02 });
-      if (e.type === 'land') this.particles.emit(fx, fy, 8, { col: [C.bone, C.steel2], speed: 1.1, dir: -Math.PI / 2, spread: Math.PI * 0.9, life: 18, g: 0.02 });
-      if (e.type === 'step') this.particles.emit(fx, fy, 2, { col: [C.steel2], speed: .4, dir: -Math.PI / 2, spread: 1, life: 12, g: 0 });
-      if (e.type === 'hit' || e.type === 'death') this.particles.emit(fx, w.y + 14, e.type === 'death' ? 40 : 14, { col: [C.red, C.bone, C.void], speed: 2.4, life: 40, g: 0.06 });
-      if (e.type === 'checkpoint') this.particles.emit(fx, fy, 24, { col: [C.green, C.bone], speed: 1.6, dir: -Math.PI / 2, spread: Math.PI * 1.2, life: 34, g: -0.01 });
-      if (e.type === 'memory') this.particles.emit(fx, w.y, 28, { col: [C.bone, C.red], speed: 1.6, life: 36, g: -0.01 }); } }
+    // squash & stretch anchored at the feet
+    const air = !w.onGround && w.dead === 0; const s0 = w.dead > 0 ? 0 : this.sq - (air ? Math.min(0.2, Math.abs(w.vy) * 0.02) : 0);
+    const dw = Math.round(NULL_W * (1 + s0 * 0.8)), dh = Math.round(NULL_H * (1 - s0)), dx = sx + Math.round((NULL_W - dw) / 2), dy = sy + NULL_H - dh;
+    // crimson rim light, then the body, then a faint additive highlight
+    if (w.dead === 0) { const rim = tinted(spr, C.red); const a0 = ctx.globalAlpha; ctx.globalAlpha = a0 * 0.6; ctx.drawImage(rim, dx - 1, dy, dw, dh); ctx.drawImage(rim, dx + 1, dy, dw, dh); ctx.drawImage(rim, dx, dy - 1, dw, dh); ctx.globalAlpha = a0; }
+    ctx.drawImage(spr, dx, dy, dw, dh);
+    if (w.dead === 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha *= 0.16; ctx.drawImage(tinted(spr, '#c9d4ff'), dx, dy, dw, dh); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.globalAlpha = 1;
+    if (this.lastTick !== w.tick) {
+      this.lastTick = w.tick; this.sq *= 0.8; const fast = (Math.abs(w.vx) > 2.3 && w.onGround) || (!w.onGround && Math.abs(w.vy) > 3.5);
+      if (fast && w.dead === 0 && w.tick % 2 === 0) { this.trail.push({ x: dx + cx, y: dy + cy, w: dw, h: dh, spr: tinted(spr, w.onGround ? TINTS.boot.accent : C.red) }); if (this.trail.length > 5) this.trail.shift(); } else if (this.trail.length && w.tick % 2 === 0) this.trail.shift();
+      for (const e of w.events) { const fx = w.x + 7, fy = w.y + 28;
+        if (e.type === 'jump') { this.sq = -0.3; this.particles.emit(fx, fy, 8, { col: [C.bone, C.steel2], speed: 1.1, dir: -Math.PI / 2, spread: Math.PI, life: 18, g: 0.02 }); }
+        if (e.type === 'land') { const hard = Math.min(1, this.prevVy / 9); this.sq = 0.12 + 0.3 * hard; this.particles.emit(fx, fy, 6 + Math.round(hard * 14), { col: [C.bone, C.steel2, C.steel3], speed: 1.1 + hard, dir: -Math.PI / 2, spread: Math.PI * 0.95, life: 20 + hard * 10, g: 0.02, size: hard > 0.6 ? 2 : 1 }); }
+        if (e.type === 'step') this.particles.emit(fx - w.facing * 4, fy, 2, { col: [C.steel2, C.steel3], speed: .5, dir: w.facing > 0 ? Math.PI : 0, spread: 0.9, life: 14, g: -0.005 });
+        if (e.type === 'hit' || e.type === 'death') this.particles.emit(fx, w.y + 14, e.type === 'death' ? 40 : 14, { col: [C.red, C.bone, C.void], speed: 2.4, life: 40, g: 0.06 });
+        if (e.type === 'checkpoint') this.particles.emit(fx, fy, 24, { col: [C.green, C.bone], speed: 1.6, dir: -Math.PI / 2, spread: Math.PI * 1.2, life: 34, g: -0.01 });
+        if (e.type === 'memory') this.particles.emit(fx, w.y, 28, { col: [C.bone, C.red], speed: 1.6, life: 36, g: -0.01 }); }
+      this.prevVy = Math.max(0, w.vy);
+    }
     this.particles.update();
   }
   private drawArc(ctx: Ctx, arc: [number, number][], cx: number, cy: number, t: number) { ctx.fillStyle = C.green; arc.forEach(([x, y], i) => { if ((i + Math.floor(t * 12)) % 2 === 0) ctx.fillRect(Math.round(x - cx), Math.round(y - cy), 2, 2); }); const last = arc[arc.length - 1]; if (last) { ctx.fillStyle = 'rgba(83,255,154,.8)'; ctx.fillRect(Math.round(last[0] - cx) - 2, Math.round(last[1] - cy) - 1, 6, 3); } }
@@ -164,7 +206,7 @@ export class Renderer {
     // additive coloured glow on top
     ctx.globalCompositeOperation = 'lighter';
     const add = (x: number, y: number, r: number, col: string) => { const sx = x - cx, sy = y - cy; if (sx < -r || sx > VIEW_W + r || sy < -r || sy > VIEW_H + r) return; const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(sx - r, sy - r, r * 2, r * 2); };
-    add(w.x + 11, w.y + 8, 26, 'rgba(255,38,61,0.20)');
+    add(w.x + 11, w.y + 8, 36, 'rgba(255,38,61,0.30)'); add(w.x + 7, w.y + 20, 22, 'rgba(255,200,210,0.07)');
     for (const tm of this.level.terminals) add(tm.x * TILE + 16, tm.y * TILE + 14, 44, 'rgba(83,255,154,0.16)');
     for (const l of this.level.lasers) if (w.laserActive(l.rule)) { const r = w.laserRect(l); add(r.x + r.w / 2, r.y + r.h / 2, 70, 'rgba(255,38,61,0.20)'); }
     for (const e of w.enemies) add(e.x + 16, e.y + 14, 40, e.hostile ? 'rgba(255,38,61,0.17)' : 'rgba(83,255,154,0.10)');
