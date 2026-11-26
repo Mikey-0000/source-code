@@ -1,0 +1,22 @@
+{
+  "name": "source-code-game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SOURCE CODE — a psychological-horror programming platformer. You were never supposed to be playable.",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "tsx --test src/tests/*.test.ts",
+    "test:e2e": "node tests-e2e/run.mjs",
+    "preview": "node scripts/dev.mjs --dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "playwright": "^1.50.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

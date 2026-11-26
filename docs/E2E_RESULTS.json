@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-26T22:22:21.309Z",
+  "results": [
+    {
+      "name": "boot gate shown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "title menu has NEW GAME",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "canvas renders pixels",
+      "ok": true,
+      "detail": "147434"
+    },
+    {
+      "name": "player moves right",
+      "ok": true,
+      "detail": "73→222"
+    },
+    {
+      "name": "jump gives upward velocity",
+      "ok": true,
+      "detail": "-1.6852813742385704"
+    },
+    {
+      "name": "live preview updates while typing",
+      "ok": true,
+      "detail": "PREVIEW apex 120 px · air 35 frames · range 123 px · launch "
+    },
+    {
+      "name": "compile applies rules to the live world",
+      "ok": true,
+      "detail": "jumpHeight=120"
+    },
+    {
+      "name": "syntax error is reported, rules unchanged",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "out-of-range values are clamped/rejected by the sandbox",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "corruption reflects changed rules",
+      "ok": true,
+      "detail": "corruption=4"
+    },
+    {
+      "name": "exit shows SECTOR COMPLETE card",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "CONTINUE loads next level",
+      "ok": true,
+      "detail": "levelIndex=1"
+    },
+    {
+      "name": "level boot_01 renders",
+      "ok": true,
+      "detail": "px=151243"
+    },
+    {
+      "name": "level boot_02 renders",
+      "ok": true,
+      "detail": "px=149337"
+    },
+    {
+      "name": "level exc_01 renders",
+      "ok": true,
+      "detail": "px=72097"
+    },
+    {
+      "name": "level exc_02 renders",
+      "ok": true,
+      "detail": "px=93960"
+    },
+    {
+      "name": "level exc_03 renders",
+      "ok": true,
+      "detail": "px=61094"
+    },
+    {
+      "name": "level boss_watcher renders",
+      "ok": true,
+      "detail": "px=33475"
+    },
+    {
+      "name": "EDEN OS desktop opens",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no console/page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+rmSync('dist', { recursive: true, force: true });
+mkdirSync('dist', { recursive: true });
+await build({ entryPoints: ['src/main.ts'], bundle: true, minify: true, sourcemap: true, target: 'es2022', outfile: 'dist/main.js', format: 'esm', loader: { '.css': 'css' } });
+await build({ entryPoints: ['src/styles/main.css'], bundle: true, minify: true, outfile: 'dist/main.css' });
+cpSync('public', 'dist', { recursive: true });
+writeFileSync('dist/index.html', readFileSync('index.html', 'utf8'));
+writeFileSync('dist/_headers', '/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n');
+console.log('built dist/');
