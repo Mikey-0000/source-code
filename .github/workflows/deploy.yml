@@ -24,3 +24,19 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+  cloudflare:
+    # Optional: runs only when CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repo secrets are set.
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm run build
+      - name: Deploy to Cloudflare
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npx wrangler deploy

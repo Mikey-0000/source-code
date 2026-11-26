@@ -54,3 +54,14 @@ This is a vertical slice, **not** the full six-chapter game. See [docs/KNOWN_LIM
 
 ## Credits
 Design, code, art and audio: generated for this project; all assets are original and procedural. Created with Claude.
+
+## Deploy to Cloudflare
+
+The game is a static site (`dist/`), so it runs on Cloudflare Workers static assets / Pages.
+
+**Dashboard (easiest):** Workers & Pages → Create → Connect to Git → pick this repo.
+Build command `npm run build`, output directory `dist` (Pages), or leave the default deploy command `npx wrangler deploy` (Workers; uses `wrangler.jsonc`).
+
+**CLI:** `npx wrangler login` then `npm run deploy:cf`.
+
+**GitHub Actions:** add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; the `cloudflare` job then deploys on every push to `main`.
